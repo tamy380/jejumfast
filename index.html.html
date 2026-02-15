@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JejumFast 28D</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- Babel para JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .animate-in { animation: fadeIn 0.5s ease-out forwards; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-slate-50">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        // Ícones em SVG para evitar dependências externas pesadas
+        const Icon = ({ name, size = 20, className = "" }) => {
+            // Simplificação: Usando Lucide via CDN no final ou SVGs diretos
+            // Para garantir que funcione no Google Sites, usamos spans com data-lucide
+            return <i data-lucide={name} className={className} style={{ width: size, height: size }}></i>;
+        };
+
+        function App() {
+            const [activeTab, setActiveTab] = useState('plano'); 
+            const [userData, setUserData] = useState({
+                wakeTime: "07:00",
+                preference: "late-breakfast",
+                fastingType: "16:8",
+                completedDays: [], 
+                startDate: null
+            });
+            const [activeFasters, setActiveFasters] = useState(3420);
+            const [showResults, setShowResults] = useState(false);
+
+            useEffect(() => {
+                const saved = localStorage.getItem('jejumfast_app_data_v1');
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    setUserData(parsed);
+                    if (parsed.completedDays.length > 0) setShowResults(true);
+                }
+                
+                const interval = setInterval(() => {
+                    setActiveFasters(prev => prev + (Math.random() > 0.5 ? 1 : -1));
+                }, 5000);
+                return () => clearInterval(interval);
+            }, []);
+
+            useEffect(() => {
+                localStorage.setItem('jejumfast_app_data_v1', JSON.stringify(userData));
+                // Reinicia os ícones sempre que o DOM muda
+                if (window.lucide) window.lucide.createIcons();
+            }, [userData, showResults, activeTab]);
+
+            const fastingPlan = useMemo(() => {
+                const [hours] = userData.fastingType.split(':').map(Number);
+                const eatingWindow = 24 - hours;
+                
+                let startEating, endEating;
+                if (userData.preference === "late-breakfast") {
+                    startEating = "12:00";
+                    endEating = `${12 + eatingWindow}:00`;
+                } else {
+                    endEating = "19:00";
+                    const startH = 19 - eatingWindow;
+                    startEating = `${startH < 10 ? '0' + startH : startH}:00`;
+                }
+
+                return {
+                    fastHours: hours,
+                    eatHours: eatingWindow,
+                    start: startEating,
+                    end: endEating
+                };
+            }, [userData]);
+
+            const toggleDay = (day) => {
+                setUserData(prev => {
+                    const isCompleted = prev.completedDays.includes(day);
+                    const newList = isCompleted 
+                        ? prev.completedDays.filter(d => d !== day)
+                        : [...prev.completedDays, day];
+                    
+                    return { 
+                        ...prev, 
+                        completedDays: newList,
+                        startDate: prev.startDate || new Date().toISOString()
+                    };
+                });
+            };
+
+            const progressPercent = Math.round((userData.completedDays.length / 28) * 100);
+
+            const Card = ({ children, className = "" }) => (
+                <div className={`bg-white rounded-2xl shadow-sm border border-slate-100 p-6 ${className}`}>
+                    {children}
+                </div>
+            );
+
+            // Gráfico de Pizza em SVG Simples
+            const SimplePieChart = ({ fast, eat }) => {
+                const total = fast + eat;
+                const fastAngle = (fast / total) * 360;
+                const strokeDash = (fast / total) * 251.2; // 2 * PI * R (R=40)
+                
+                return (
+                    <div className="relative flex items-center justify-center w-48 h-48 mx-auto">
+                        <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
+                            <circle cx="50" cy="50" r="40" fill="transparent" stroke="#10b981" strokeWidth="12" />
+                            <circle cx="50" cy="50" r="40" fill="transparent" stroke="#4f46e5" strokeWidth="12" 
+                                    strokeDasharray={`${strokeDash} 251.2`} />
+                        </svg>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center">
+                            <span className="text-3xl font-black text-indigo-600 leading-none">{fast}h</span>
+                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mt-1">Jejum</span>
+                        </div>
+                    </div>
+                );
+            };
+
+            return (
+                <div className="max-w-md mx-auto min-h-screen pb-24 relative">
+                    <header className="bg-white px-6 py-6 border-b border-slate-100 text-center">
+                        <div className="flex justify-center mb-2">
+                            <div className="bg-indigo-50 p-2 rounded-xl text-indigo-600">
+                                <Icon name="zap" />
+                            </div>
+                        </div>
+                        <h1 className="text-xl font-black tracking-tight text-slate-900 italic uppercase">JejumFast 28D</h1>
+                        {showResults && (
+                            <div className="flex bg-slate-100 p-1 rounded-xl mt-4 max-w-[240px] mx-auto">
+                                <button onClick={() => setActiveTab('plano')} className={`flex-1 py-2 text-[10px] font-bold rounded-lg transition-all ${activeTab === 'plano' ? "bg-white shadow-sm text-indigo-600" : "text-slate-500"}`}>MEU PLANO</button>
+                                <button onClick={() => setActiveTab('progresso')} className={`flex-1 py-2 text-[10px] font-bold rounded-lg transition-all ${activeTab === 'progresso' ? "bg-white shadow-sm text-indigo-600" : "text-slate-500"}`}>MEU PROGRESSO</button>
+                            </div>
+                        )}
+                    </header>
+
+                    <main className="px-4 mt-4 space-y-6">
+                        <div className="bg-indigo-600 rounded-2xl p-4 text-white shadow-lg flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <Icon name="users" className="text-indigo-200" />
+                                <div>
+                                    <p className="text-[10px] font-bold opacity-80 uppercase tracking-tighter">Comunidade Ativa</p>
+                                    <p className="text-sm font-bold">{activeFasters.toLocaleString()} mulheres online</p>
+                                </div>
+                            </div>
+                            <div className="bg-emerald-400 w-2 h-2 rounded-full animate-pulse"></div>
+                        </div>
+
+                        {!showResults ? (
+                            <Card className="animate-in">
+                                <h2 className="text-lg font-black mb-6 flex items-center gap-2 text-indigo-900 uppercase">
+                                    <Icon name="calendar" className="text-indigo-600" /> PLANEJAR JORNADA
+                                </h2>
+                                <div className="space-y-6">
+                                    <div>
+                                        <label className="text-[10px] font-black text-slate-400 uppercase mb-2 block tracking-widest text-center">Que horas você acorda?</label>
+                                        <input type="time" className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 font-black text-center text-xl text-indigo-600 outline-none" value={userData.wakeTime} onChange={(e) => setUserData({...userData, wakeTime: e.target.value})} />
+                                    </div>
+                                    <div className="space-y-2">
+                                        {[
+                                            { id: '14:10', label: 'Iniciante', sub: '14h jejum / 10h comer' },
+                                            { id: '16:8', label: 'Ideal (Mais rápido)', sub: '16h jejum / 8h comer' },
+                                            { id: '18:6', label: 'Avançado', sub: '18h jejum / 6h comer' }
+                                        ].map(opt => (
+                                            <button key={opt.id} onClick={() => setUserData({...userData, fastingType: opt.id})} className={`w-full flex justify-between items-center p-4 rounded-xl border-2 transition-all ${userData.fastingType === opt.id ? "border-indigo-500 bg-indigo-50 shadow-sm" : "border-slate-100"}`}>
+                                                <span className={`font-bold text-sm ${userData.fastingType === opt.id ? "text-indigo-700" : "text-slate-700"}`}>{opt.label}</span>
+                                                <span className="text-[10px] text-slate-400 font-black">{opt.id}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <button onClick={() => setShowResults(true)} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-5 rounded-2xl flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95">
+                                        GERAR MEU PLANO <Icon name="arrow-right" />
+                                    </button>
+                                </div>
+                            </Card>
+                        ) : (
+                            <div className="space-y-6 animate-in">
+                                {activeTab === 'plano' ? (
+                                    <>
+                                        <Card className="text-center relative">
+                                            <h2 className="text-lg font-black text-slate-900 italic uppercase">Sua Janela Bio-Ideal</h2>
+                                            <SimplePieChart fast={fastingPlan.fastHours} eat={fastingPlan.eatHours} />
+                                            <div className="grid grid-cols-2 gap-3 mt-4">
+                                                <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
+                                                    <p className="text-[9px] text-emerald-600 font-black uppercase mb-1">Pode Comer</p>
+                                                    <p className="text-xl font-black text-emerald-800 tracking-tight">{fastingPlan.start}</p>
+                                                </div>
+                                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                                                    <p className="text-[9px] text-slate-500 font-black uppercase mb-1">Início Jejum</p>
+                                                    <p className="text-xl font-black text-slate-700 tracking-tight">{fastingPlan.end}</p>
+                                                </div>
+                                            </div>
+                                            <button onClick={() => setShowResults(false)} className="mt-6 text-[9px] font-black text-slate-300 uppercase tracking-widest">Ajustar Plano</button>
+                                        </Card>
+                                        <Card>
+                                            <h3 className="font-black text-[10px] uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2">
+                                                <Icon name="trophy" className="text-amber-500" /> SEGREDOS 28 DIAS
+                                            </h3>
+                                            <div className="space-y-3 text-[11px] leading-relaxed text-slate-600">
+                                                <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex gap-2">
+                                                    <Icon name="flame" className="text-orange-500 flex-shrink-0" />
+                                                    <p>A queima intensa ocorre entre <strong>{userData.wakeTime}</strong> e <strong>{fastingPlan.start}</strong>.</p>
+                                                </div>
+                                                <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex gap-2">
+                                                    <Icon name="heart" className="text-rose-500 flex-shrink-0" />
+                                                    <p>O 7K Club recomenda beber 2L de água durante o período de jejum.</p>
+                                                </div>
+                                            </div>
+                                        </Card>
+                                    </>
+                                ) : (
+                                    <div className="space-y-4">
+                                        <Card className="bg-indigo-600 text-white overflow-hidden relative shadow-xl">
+                                            <div className="relative z-10">
+                                                <div className="flex justify-between items-end mb-4">
+                                                    <div>
+                                                        <p className="text-[10px] font-black opacity-60 uppercase">Progresso 28 Dias</p>
+                                                        <h3 className="text-3xl font-black italic">{progressPercent}%</h3>
+                                                    </div>
+                                                    <Icon name="award" className="text-indigo-200 opacity-40" size={32} />
+                                                </div>
+                                                <div className="w-full bg-indigo-800/50 h-2 rounded-full overflow-hidden">
+                                                    <div className="bg-emerald-400 h-full transition-all duration-700" style={{ width: `${progressPercent}%` }}></div>
+                                                </div>
+                                            </div>
+                                        </Card>
+                                        <Card>
+                                            <div className="flex justify-between items-center mb-6">
+                                                <h3 className="font-black text-xs uppercase italic text-indigo-900">Checklist Diário</h3>
+                                                <div className="flex gap-1">
+                                                    {[1,2,3,4].map(i => (
+                                                        <div key={i} className={`w-2 h-2 rounded-full ${userData.completedDays.length >= i*7 ? "bg-amber-400" : "bg-slate-100"}`}></div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-7 gap-2">
+                                                {Array.from({ length: 28 }, (_, i) => i + 1).map(day => {
+                                                    const isDone = userData.completedDays.includes(day);
+                                                    return (
+                                                        <button key={day} onClick={() => toggleDay(day)} className={`aspect-square rounded-lg flex items-center justify-center transition-all border-2 text-[10px] font-black ${isDone ? "bg-emerald-500 border-emerald-500 text-white scale-105" : "bg-white border-slate-100 text-slate-300"}`}>
+                                                            {day}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                            <div className="mt-6 grid grid-cols-2 gap-4">
+                                                <div className="bg-slate-50 p-4 rounded-xl text-center">
+                                                    <p className="text-[8px] font-black text-slate-400 uppercase">Sequência</p>
+                                                    <p className="text-xl font-black text-indigo-600 flex items-center justify-center gap-1"><Icon name="flame" /> {userData.completedDays.length}</p>
+                                                </div>
+                                                <div className="bg-slate-50 p-4 rounded-xl text-center">
+                                                    <p className="text-[8px] font-black text-slate-400 uppercase">Medalhas</p>
+                                                    <p className="text-xl font-black text-emerald-600 flex items-center justify-center gap-1"><Icon name="award" /> {Math.floor(userData.completedDays.length / 7)}</p>
+                                                </div>
+                                            </div>
+                                        </Card>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        
+                        <div className="text-center opacity-30 py-6">
+                            <p className="text-[8px] font-black uppercase tracking-[0.3em]">JejumFast • Protocolo 28 Dias</p>
+                        </div>
+                    </main>
+
+                    {showResults && (
+                        <nav className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-sm border-t border-slate-100 px-8 py-4 flex justify-around max-w-md mx-auto z-50 rounded-t-3xl shadow-lg">
+                            <button onClick={() => setActiveTab('plano')} className={`flex flex-col items-center gap-1 ${activeTab === 'plano' ? "text-indigo-600" : "text-slate-300"}`}>
+                                <Icon name="clock" />
+                                <span className="text-[8px] font-black uppercase">Agenda</span>
+                            </button>
+                            <button onClick={() => setActiveTab('progresso')} className={`flex flex-col items-center gap-1 ${activeTab === 'progresso' ? "text-indigo-600" : "text-slate-300"}`}>
+                                <Icon name="calendar" />
+                                <span className="text-[8px] font-black uppercase">Diário</span>
+                            </button>
+                        </nav>
+                    )}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
